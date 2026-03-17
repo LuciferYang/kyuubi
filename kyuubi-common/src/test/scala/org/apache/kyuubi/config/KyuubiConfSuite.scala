@@ -237,4 +237,21 @@ class KyuubiConfSuite extends KyuubiFunSuite {
     assert(kyuubiConf.getUserDefaults("kyuubi").getAll.size == 0)
     assert(kyuubiConf.getUserDefaults("user").getAll.size == 0)
   }
+
+  test("KYUUBI #7244: set with null value should be silently ignored") {
+    val conf = new KyuubiConf()
+    conf.set("kyuubi.test.key", "original")
+    // Setting a null value should not throw and should not overwrite the existing value
+    conf.set("kyuubi.test.key", null)
+    assert(conf.getOption("kyuubi.test.key") === Some("original"))
+
+    // Setting a null value for a new key should not add the entry
+    conf.set("kyuubi.test.null.key", null)
+    assert(conf.getOption("kyuubi.test.null.key").isEmpty)
+
+    // Setting a null key should still throw
+    intercept[IllegalArgumentException] {
+      conf.set(null: String, "value")
+    }
+  }
 }

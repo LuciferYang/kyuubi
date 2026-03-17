@@ -664,7 +664,11 @@ class JDBCMetadataStore(conf: KyuubiConf) extends MetadataStore with Logging {
     if (str == null || str.isEmpty) {
       Map.empty
     } else {
-      mapper.readValue(str, classOf[Map[String, String]])
+      // Filter out null values that may have been persisted by older versions
+      // before KYUUBI #7244 was fixed, to prevent null propagation to downstream consumers.
+      // This filter is still necessary even though KyuubiConf.set now tolerates null,
+      // because the Map may be consumed by external components that do not expect null values.
+      mapper.readValue(str, classOf[Map[String, String]]).filter(_._2 != null)
     }
   }
 

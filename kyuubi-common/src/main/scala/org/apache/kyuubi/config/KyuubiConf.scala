@@ -74,11 +74,20 @@ case class KyuubiConf(loadSysDefault: Boolean = true) extends Logging {
     this
   }
 
+  /**
+   * Set a configuration key-value pair.
+   * If `value` is null, the entry is silently ignored (logged at DEBUG level)
+   * to tolerate historical data persisted before KYUUBI #7244 was fixed.
+   * A null `key` will still throw [[IllegalArgumentException]].
+   */
   def set(key: String, value: String): KyuubiConf = {
     require(key != null, "key cannot be null")
-    require(value != null, s"value cannot be null for key: $key")
-    if (settings.put(key, value) == null) {
-      logDeprecationWarning(key)
+    if (value == null) {
+      debug(s"Ignoring null value for config key: $key")
+    } else {
+      if (settings.put(key, value) == null) {
+        logDeprecationWarning(key)
+      }
     }
     this
   }

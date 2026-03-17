@@ -337,4 +337,49 @@ class JDBCMetadataStoreSuite extends KyuubiFunSuite {
     jdbcMetadataStore.cleanupKubernetesEngineInfoByIdentifier(tag)
     assert(jdbcMetadataStore.getKubernetesMetaEngineInfo(tag) == null)
   }
+
+  test("KYUUBI #7244: null values in request_conf should be filtered during deserialization") {
+    val batchId = UUID.randomUUID().toString
+    val batchMetadata = Metadata(
+      identifier = batchId,
+      sessionType = SessionType.BATCH,
+      realUser = "kyuubi",
+      username = "kyuubi",
+      ipAddress = "127.0.0.1",
+      kyuubiInstance = "localhost:10099",
+      state = "PENDING",
+      resource = "intern",
+      className = "org.apache.kyuubi.SparkWC",
+      requestName = "kyuubi_batch",
+      requestConf = Map("spark.master" -> "local"),
+      requestArgs = Seq("100"),
+      createTime = System.currentTimeMillis(),
+      engineType = "spark",
+      clusterManager = Some("local"))
+
+    jdbcMetadataStore.insertMetadata(batchMetadata)
+
+    // Simulate a previously persisted record containing null values in request_conf JSON,
+    // as could happen when a user submits {"conf": {"sfPassword": null}} via Batch API.
+    val conn = jdbcMetadataStore.hikariDataSource.getConnection
+    try {
+      val stmt = conn.prepareStatement(
+        "UPDATE metadata SET request_conf = ? WHERE identifier = ?")
+      stmt.setString(1, """{"spark.master":"local","sfPassword":null,"nullKey":null}""")
+      stmt.setString(2, batchId)
+      stmt.executeUpdate()
+      stmt.close()
+    } finally {
+      conn.close()
+    }
+
+    val recovered = jdbcMetadataStore.getMetadata(batchId)
+    assert(recovered != null)
+    // Null values should be filtered out, only non-null entries remain
+    assert(recovered.requestConf === Map("spark.master" -> "local"))
+    assert(!recovered.requestConf.contains("sfPassword"))
+    assert(!recovered.requestConf.contains("nullKey"))
+
+    jdbcMetadataStore.cleanupMetadataByIdentifier(batchId)
+  }
 }
